@@ -42,7 +42,7 @@ export class CheckoutService {
         cancelUrl: dto.cancelUrl ?? null,
         metadata: dto.metadata ?? null,
         expiresAt,
-      })
+      } as any)
       .returning();
 
     const url = `${this.frontendUrl}/checkout/${session.id}`;
@@ -63,11 +63,10 @@ export class CheckoutService {
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    // Auto-expire
     if (session.status === 'pending' && new Date() > session.expiresAt) {
       await db
         .update(checkoutSessions)
-        .set({ status: 'expired' })
+        .set({ status: 'expired' } as any)
         .where(eq(checkoutSessions.id, sessionId));
       return { ...session, status: 'expired' as const };
     }
@@ -86,7 +85,7 @@ export class CheckoutService {
 
     const [updated] = await db
       .update(checkoutSessions)
-      .set({ status: 'cancelled' })
+      .set({ status: 'cancelled' } as any)
       .where(eq(checkoutSessions.id, sessionId))
       .returning();
 
@@ -96,7 +95,7 @@ export class CheckoutService {
   async markAsPaid(sessionId: string) {
     const [updated] = await db
       .update(checkoutSessions)
-      .set({ status: 'paid' })
+      .set({ status: 'paid' } as any)
       .where(eq(checkoutSessions.id, sessionId))
       .returning();
     return updated;

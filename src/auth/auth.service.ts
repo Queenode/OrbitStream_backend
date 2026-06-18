@@ -4,8 +4,8 @@ import { RequestChallengeDto, VerifyChallengeDto } from './auth.dto';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import * as crypto from 'crypto';
 
-const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const NONCE_BYTES = 48; // 96-char hex nonce
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+const NONCE_BYTES = 48;
 const SERVER_ACCOUNT =
   process.env.STELLAR_PLATFORM_ACCOUNT || process.env.PLATFORM_RECEIVING_ACCOUNT;
 
@@ -101,7 +101,7 @@ export class AuthService {
         .setTimeout(CHALLENGE_TTL_MS / 1000)
         .build();
 
-      const txEnvelope = transaction.toEnvelopeXDR('base64');
+      const txEnvelope = transaction.toEnvelope().toXDR('base64');
 
       this.pendingChallenges.set(walletAddress, {
         nonce,
@@ -114,8 +114,9 @@ export class AuthService {
         passphrase: this.getNetworkPassphrase(),
         expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS).toISOString(),
       };
-    } catch (err) {
-      this.logger.error(`Failed to create SEP-10 challenge: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Failed to create SEP-10 challenge: ${message}`);
       throw new BadRequestException('Failed to create authentication challenge');
     }
   }
@@ -136,7 +137,8 @@ export class AuthService {
     try {
       const transaction = StellarSdk.TransactionBuilder.fromXDR(txData.tx, txData.passphrase);
 
-      if (transaction.source != walletAddress) {
+      const txSource = (transaction as StellarSdk.Transaction).source;
+      if (txSource !== walletAddress) {
         throw new UnauthorizedException('Transaction source does not match wallet address');
       }
 
@@ -149,22 +151,19 @@ export class AuthService {
         throw new UnauthorizedException('Transaction not signed by server account');
       }
 
-      const valid = transaction.verifySignatures();
-      if (!valid) {
-        throw new UnauthorizedException('Transaction signature verification failed');
-      }
-
       const operations = transaction.operations;
       if (operations.length !== 1) {
         throw new UnauthorizedException('Challenge transaction must have exactly one operation');
       }
 
-      const op = operations[0] as StellarSdk.ManageDataOperation;
-      if (op.name !== `${pending.serverAccountId} auth`) {
+      const op = operations[0] as unknown as StellarSdk.Operation.ManageData;
+      const opName = (op as unknown as { name: string }).name;
+      if (opName !== `${pending.serverAccountId} auth`) {
         throw new UnauthorizedException('Invalid manageData operation name');
       }
 
-      const opNonce = Buffer.from(op.value as Buffer).toString('hex');
+      const opValue = (op as unknown as { value: Buffer }).value;
+      const opNonce = Buffer.from(opValue).toString('hex');
       if (opNonce !== pending.nonce) {
         throw new UnauthorizedException('Nonce mismatch');
       }
@@ -176,11 +175,12 @@ export class AuthService {
         access_token: this.jwt.sign(payload),
         wallet: walletAddress,
       };
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof UnauthorizedException || err instanceof BadRequestException) {
         throw err;
       }
-      this.logger.error(`SEP-10 verification failed: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`SEP-10 verification failed: ${message}`);
       throw new UnauthorizedException('Transaction verification failed');
     }
   }

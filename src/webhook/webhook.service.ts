@@ -32,7 +32,7 @@ export class WebhookService {
         event,
         payload: { event, data },
         attempts: 1,
-      })
+      } as any)
       .returning();
 
     try {
@@ -50,7 +50,7 @@ export class WebhookService {
         .set({
           responseStatus: response.status,
           deliveredAt: new Date(),
-        })
+        } as any)
         .where(eq(webhookDeliveries.id, delivery.id));
 
       this.logger.log(`Webhook delivered: ${event} to ${merchant.webhookUrl}`);
@@ -63,7 +63,7 @@ export class WebhookService {
         .set({
           responseStatus: status ?? null,
           nextRetryAt: nextRetry,
-        })
+        } as any)
         .where(eq(webhookDeliveries.id, delivery.id));
 
       this.logger.error(`Webhook failed: ${event} — ${err.message}`);
@@ -111,7 +111,7 @@ export class WebhookService {
             responseStatus: response.status,
             deliveredAt: new Date(),
             attempts: delivery.attempts + 1,
-          })
+          } as any)
           .where(eq(webhookDeliveries.id, delivery.id));
       } catch {
         const backoff = Math.pow(2, delivery.attempts) * 60000;
@@ -120,7 +120,7 @@ export class WebhookService {
           .set({
             attempts: delivery.attempts + 1,
             nextRetryAt: new Date(Date.now() + backoff),
-          })
+          } as any)
           .where(eq(webhookDeliveries.id, delivery.id));
       }
     }

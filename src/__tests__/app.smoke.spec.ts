@@ -1,17 +1,31 @@
-import { createApp } from '../index';
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { AppModule } from '../app.module';
 
 describe('App smoke test', () => {
-  it('should create an Express app', () => {
-    const app = createApp();
-    expect(app).toBeDefined();
-    expect(typeof app.listen).toBe('function');
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = module.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
   });
 
-  it('should have health endpoint registered', () => {
-    const app = createApp();
-    const routes = app._router.stack
-      .filter((layer: any) => layer.route)
-      .map((layer: any) => layer.route.path);
-    expect(routes).toContain('/health');
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('should be defined', () => {
+    expect(app).toBeDefined();
+  });
+
+  it('should have health endpoint', async () => {
+    const httpServer = app.getHttpServer();
+    const { status } = await require('supertest')(httpServer).get('/health');
+    expect(status).toBe(200);
   });
 });

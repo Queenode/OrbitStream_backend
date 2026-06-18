@@ -39,8 +39,9 @@ export class PaymentDetectorService implements OnModuleInit {
             this.cursor = op.paging_token;
           }
         }
-      } catch (err) {
-        this.logger.error('Payment polling error', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error('Payment polling error', message);
       }
       await this.sleep(3000);
     }
@@ -79,7 +80,7 @@ export class PaymentDetectorService implements OnModuleInit {
     // Mark session as paid
     await db
       .update(checkoutSessions)
-      .set({ status: 'paid' })
+      .set({ status: 'paid' } as any)
       .where(eq(checkoutSessions.id, session.id));
 
     // Record payment
@@ -92,7 +93,7 @@ export class PaymentDetectorService implements OnModuleInit {
       assetIssuer: op.asset_issuer ?? null,
       senderAddress: op.from,
       confirmedAt: new Date(),
-    });
+    } as any);
 
     this.metrics.paymentsConfirmed.inc();
     this.logger.log(`Payment confirmed for session ${session.id} — tx ${op.transaction_hash}`);
