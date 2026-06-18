@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
+import { UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { RedisService } from './redis.service';
@@ -22,9 +22,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('AuthService', () => {
   let service: AuthService;
-  let jwtService: JwtService;
-  let redisService: RedisService;
-  
+
   const mockWallet = StellarSdk.Keypair.random();
   const mockServerKeypair = StellarSdk.Keypair.random();
   const mockNonce = 'a'.repeat(64);
@@ -49,7 +47,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     mockRedisClient.incr.mockResolvedValue(1); // rate limit
 
     const module: TestingModule = await Test.createTestingModule({
@@ -62,14 +60,12 @@ describe('AuthService', () => {
         {
           provide: RedisService,
           useValue: { getClient: () => mockRedisClient },
-        }
+        },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    jwtService = module.get<JwtService>(JwtService);
-    redisService = module.get<RedisService>(RedisService);
-    
+
     // Reset circuit breaker
     (service as any).horizonFailureCount = 0;
     (service as any).horizonCircuitOpenUntil = 0;
@@ -86,7 +82,7 @@ describe('AuthService', () => {
   it('should verify a valid challenge successfully', async () => {
     mockRedisClient.get.mockResolvedValue(mockNonce);
     mockedAxios.get.mockResolvedValue({
-      data: { signers: [{ key: mockWallet.publicKey(), weight: 1 }] }
+      data: { signers: [{ key: mockWallet.publicKey(), weight: 1 }] },
     });
 
     // Create a mock valid challenge tx
@@ -94,21 +90,23 @@ describe('AuthService', () => {
       minTime: (Math.floor(Date.now() / 1000) - 100).toString(),
       maxTime: (Math.floor(Date.now() / 1000) + 100).toString(),
     };
-    
+
     const tx = new StellarSdk.TransactionBuilder(
       new StellarSdk.Account(mockServerKeypair.publicKey(), '0'),
       {
         fee: StellarSdk.BASE_FEE,
         networkPassphrase: StellarSdk.Networks.TESTNET,
-        timebounds
-      }
+        timebounds,
+      },
     )
-    .addOperation(StellarSdk.Operation.manageData({
-      source: mockWallet.publicKey(),
-      name: `${mockServerKeypair.publicKey()} auth`,
-      value: Buffer.from(mockNonce, 'hex'),
-    }))
-    .build();
+      .addOperation(
+        StellarSdk.Operation.manageData({
+          source: mockWallet.publicKey(),
+          name: `${mockServerKeypair.publicKey()} auth`,
+          value: Buffer.from(mockNonce, 'hex'),
+        }),
+      )
+      .build();
 
     tx.sign(mockServerKeypair); // Server signs
     tx.sign(mockWallet); // Client signs
@@ -117,8 +115,8 @@ describe('AuthService', () => {
       walletAddress: mockWallet.publicKey(),
       transaction: {
         tx: tx.toEnvelope().toXDR('base64'),
-        passphrase: StellarSdk.Networks.TESTNET
-      }
+        passphrase: StellarSdk.Networks.TESTNET,
+      },
     });
 
     expect(result.access_token).toBe('mock-token');
@@ -127,78 +125,95 @@ describe('AuthService', () => {
 
   it('should reject if nonce is not in redis (expired/used)', async () => {
     mockRedisClient.get.mockResolvedValue(null);
-    await expect(service.verifyChallenge({
-      walletAddress: mockWallet.publicKey(),
-      transaction: { tx: 'base64xdr', passphrase: StellarSdk.Networks.TESTNET }
-    })).rejects.toThrow(UnauthorizedException);
+    await expect(
+      service.verifyChallenge({
+        walletAddress: mockWallet.publicKey(),
+        transaction: { tx: 'base64xdr', passphrase: StellarSdk.Networks.TESTNET },
+      }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('should reject expired timebounds (clock skew > 60s)', async () => {
     mockRedisClient.get.mockResolvedValue(mockNonce);
-    
+
     const timebounds = {
       minTime: (Math.floor(Date.now() / 1000) - 400).toString(), // 400s in past
       maxTime: (Math.floor(Date.now() / 1000) - 100).toString(), // 100s in past
     };
-    
+
     const tx = new StellarSdk.TransactionBuilder(
       new StellarSdk.Account(mockServerKeypair.publicKey(), '0'),
       {
         fee: StellarSdk.BASE_FEE,
         networkPassphrase: StellarSdk.Networks.TESTNET,
-        timebounds
-      }
+        timebounds,
+      },
     )
-    .addOperation(StellarSdk.Operation.manageData({
-      source: mockWallet.publicKey(),
-      name: `${mockServerKeypair.publicKey()} auth`,
-      value: Buffer.from(mockNonce, 'hex'),
-    }))
-    .build();
+      .addOperation(
+        StellarSdk.Operation.manageData({
+          source: mockWallet.publicKey(),
+          name: `${mockServerKeypair.publicKey()} auth`,
+          value: Buffer.from(mockNonce, 'hex'),
+        }),
+      )
+      .build();
 
     tx.sign(mockServerKeypair);
     tx.sign(mockWallet);
 
-    await expect(service.verifyChallenge({
-      walletAddress: mockWallet.publicKey(),
-      transaction: {
-        tx: tx.toEnvelope().toXDR('base64'),
-        passphrase: StellarSdk.Networks.TESTNET
-      }
-    })).rejects.toThrow(/expired/i);
+    await expect(
+      service.verifyChallenge({
+        walletAddress: mockWallet.publicKey(),
+        transaction: {
+          tx: tx.toEnvelope().toXDR('base64'),
+          passphrase: StellarSdk.Networks.TESTNET,
+        },
+      }),
+    ).rejects.toThrow(/expired/i);
   });
 
   it('should retry horizon and then fail, opening circuit breaker', async () => {
     mockRedisClient.get.mockResolvedValue(mockNonce);
-    
+
     // Simulate Horizon 503 error
     mockedAxios.get.mockRejectedValue({
-      response: { status: 503 }
+      response: { status: 503 },
     });
 
     const timebounds = {
       minTime: (Math.floor(Date.now() / 1000) - 100).toString(),
       maxTime: (Math.floor(Date.now() / 1000) + 100).toString(),
     };
-    
+
     const tx = new StellarSdk.TransactionBuilder(
       new StellarSdk.Account(mockServerKeypair.publicKey(), '0'),
-      { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET, timebounds }
-    ).addOperation(StellarSdk.Operation.manageData({
-      source: mockWallet.publicKey(), name: `${mockServerKeypair.publicKey()} auth`, value: Buffer.from(mockNonce, 'hex')
-    })).build();
+      { fee: StellarSdk.BASE_FEE, networkPassphrase: StellarSdk.Networks.TESTNET, timebounds },
+    )
+      .addOperation(
+        StellarSdk.Operation.manageData({
+          source: mockWallet.publicKey(),
+          name: `${mockServerKeypair.publicKey()} auth`,
+          value: Buffer.from(mockNonce, 'hex'),
+        }),
+      )
+      .build();
 
     tx.sign(mockServerKeypair);
     tx.sign(mockWallet);
 
     // Trigger the circuit breaker by failing 3 times
     for (let i = 0; i < 3; i++) {
-      await expect(service.verifyChallenge({
-        walletAddress: mockWallet.publicKey(),
-        transaction: { tx: tx.toEnvelope().toXDR('base64'), passphrase: StellarSdk.Networks.TESTNET }
-      })).rejects.toThrow(ServiceUnavailableException);
+      await expect(
+        service.verifyChallenge({
+          walletAddress: mockWallet.publicKey(),
+          transaction: {
+            tx: tx.toEnvelope().toXDR('base64'),
+            passphrase: StellarSdk.Networks.TESTNET,
+          },
+        }),
+      ).rejects.toThrow(ServiceUnavailableException);
     }
-    
+
     expect(mockedAxios.get).toHaveBeenCalledTimes(9); // 3 calls * (Initial + 2 retries)
     expect((service as any).horizonFailureCount).toBe(3);
     expect((service as any).horizonCircuitOpenUntil).toBeGreaterThan(Date.now());
@@ -206,9 +221,11 @@ describe('AuthService', () => {
 
   it('should enforce rate limiting', async () => {
     mockRedisClient.incr.mockResolvedValue(11); // Over limit
-    await expect(service.verifyChallenge({
-      walletAddress: mockWallet.publicKey(),
-      transaction: { tx: 'base64xdr', passphrase: StellarSdk.Networks.TESTNET }
-    })).rejects.toThrow(/Too many failed/i);
+    await expect(
+      service.verifyChallenge({
+        walletAddress: mockWallet.publicKey(),
+        transaction: { tx: 'base64xdr', passphrase: StellarSdk.Networks.TESTNET },
+      }),
+    ).rejects.toThrow(/Too many failed/i);
   });
 });

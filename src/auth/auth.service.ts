@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, BadRequestException, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { RequestChallengeDto, VerifyChallengeDto } from './auth.dto';
 import { RedisService } from './redis.service';
@@ -12,7 +18,7 @@ const NONCE_BYTES = 32;
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  
+
   // Circuit breaker state
   private horizonFailureCount = 0;
   private horizonCircuitOpenUntil = 0;
@@ -78,7 +84,8 @@ export class AuthService {
         }
 
         const isServerError = error.response?.status >= 500;
-        const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'));
+        const isTimeout =
+          error.code === 'ECONNABORTED' || (error.message && error.message.includes('timeout'));
 
         if (isServerError || isTimeout) {
           if (attempt < maxRetries) {
@@ -94,7 +101,7 @@ export class AuthService {
             throw new ServiceUnavailableException('Horizon API is unreachable');
           }
         }
-        
+
         throw error;
       }
     }
@@ -105,7 +112,7 @@ export class AuthService {
       const hash = transaction.hash();
       const keypair = StellarSdk.Keypair.fromPublicKey(publicKey);
       const expectedHint = keypair.signatureHint();
-      return transaction.signatures.some(sig => {
+      return transaction.signatures.some((sig) => {
         if (sig.hint().equals(expectedHint)) {
           return keypair.verify(hash, sig.signature());
         }
@@ -123,9 +130,9 @@ export class AuthService {
     const serverAccountId = serverKeypair.publicKey();
 
     const nonce = crypto.randomBytes(Math.max(NONCE_BYTES, 32)).toString('hex');
-    
+
     // We mock the sequence number for the challenge transaction. Standard SEP-10 uses "0".
-    const serverAccount = new StellarSdk.Account(serverAccountId, "0");
+    const serverAccount = new StellarSdk.Account(serverAccountId, '0');
 
     const nowSeconds = Math.floor(Date.now() / 1000);
     const timebounds = {
@@ -165,7 +172,7 @@ export class AuthService {
 
   async verifyChallenge(dto: VerifyChallengeDto) {
     const { walletAddress, transaction: txData } = dto;
-    
+
     // Increment rate limit before doing anything
     await this.checkRateLimit(walletAddress);
 
@@ -178,7 +185,10 @@ export class AuthService {
 
     let transaction: StellarSdk.Transaction;
     try {
-      transaction = StellarSdk.TransactionBuilder.fromXDR(txData.tx, txData.passphrase) as StellarSdk.Transaction;
+      transaction = StellarSdk.TransactionBuilder.fromXDR(
+        txData.tx,
+        txData.passphrase,
+      ) as StellarSdk.Transaction;
     } catch {
       throw new UnauthorizedException('Invalid transaction XDR');
     }
@@ -257,11 +267,9 @@ export class AuthService {
 
     // Check if the client signed it directly
     const clientSigned = this.verifyTxSignedBy(transaction, walletAddress);
-    
+
     // To support multi-sig, we check if ANY of the signers' public keys have signed the tx
-    const hasValidSigner = signers.some(signer => 
-      this.verifyTxSignedBy(transaction, signer.key)
-    );
+    const hasValidSigner = signers.some((signer) => this.verifyTxSignedBy(transaction, signer.key));
 
     if (!clientSigned && !hasValidSigner) {
       throw new UnauthorizedException('Transaction signature is invalid or insufficient');
