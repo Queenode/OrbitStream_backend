@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../app.module';
-import * as request from 'supertest';
+import supertest from 'supertest';
 
 describe('App smoke test', () => {
   let app: INestApplication;
@@ -26,7 +26,7 @@ describe('App smoke test', () => {
 
   it('should have health endpoint', async () => {
     const httpServer = app.getHttpServer();
-    const { status } = await request(httpServer).get('/health');
+    const { status } = await supertest(httpServer).get('/health');
     expect(status).toBe(200);
   });
 });
