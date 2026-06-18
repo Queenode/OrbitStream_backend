@@ -37,8 +37,14 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/orbitstream_test
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-at-least-32-chars-long-for-ci
           STELLAR_NETWORK: TESTNET
+          STELLAR_HORIZON_URL: https://horizon-testnet.stellar.org
+          STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+          PLATFORM_RECEIVING_ACCOUNT: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
+          REDIS_URL: redis://localhost:6379
+          FRONTEND_URL: http://localhost:3000
+          PORT: 3001
 
     services:
       postgres:
@@ -51,6 +57,15 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
