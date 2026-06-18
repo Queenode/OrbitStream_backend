@@ -37,8 +37,8 @@ describe('AuthService', () => {
   });
 
   it('should throw BadRequestException when requestChallenge has no server configured', async () => {
-    await expect(
-      service.requestChallenge({ walletAddress: 'G' + 'A'.repeat(55) }),
-    ).rejects.toThrow(BadRequestException);
+    await expect(service.requestChallenge({ walletAddress: 'G' + 'A'.repeat(55) })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
