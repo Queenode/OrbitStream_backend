@@ -7,6 +7,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { StellarModule } from './stellar/stellar.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
       autoLoadEntities: true,
       synchronize: process.env.NODE_ENV !== 'production',
     }),
+    RedisModule,
     AuthModule,
     MerchantsModule,
     CheckoutModule,

@@ -1,5 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+
+export interface PaymentsPage {
+  records: any[];
+  rateLimitLimit: number;
+  rateLimitRemaining: number;
+  httpStatus: number;
+}
 
 @Injectable()
 export class StellarService {
@@ -34,20 +41,36 @@ export class StellarService {
   }
 
   async getPaymentsForAccount(accountAddress: string, cursor?: string) {
+    const { records } = await this.getPaymentsPage(accountAddress, cursor);
+    return records;
+  }
+
+  /**
+   * Fetch a page of payments and return Horizon rate-limit metadata alongside the records.
+   * Throws an AxiosError on non-2xx responses so callers can inspect the HTTP status.
+   */
+  async getPaymentsPage(accountAddress: string, cursor?: string): Promise<PaymentsPage> {
     const params: any = { order: 'asc', limit: 50 };
-    if (cursor && cursor !== 'now') {
-      params.cursor = cursor;
+    if (cursor && cursor !== 'now') params.cursor = cursor;
+
+    const response = await axios.get(`${this.horizonUrl}/accounts/${accountAddress}/payments`, {
+      params,
+    });
+
+    return {
+      records: response.data._embedded?.records ?? [],
+      rateLimitLimit: parseInt(response.headers['x-ratelimit-limit'] ?? '200', 10),
+      rateLimitRemaining: parseInt(response.headers['x-ratelimit-remaining'] ?? '200', 10),
+      httpStatus: response.status,
+    };
+  }
+
+  /** Extract HTTP status from an AxiosError, falling back to 0. */
+  getHttpStatusFromError(err: unknown): number {
+    if (axios.isAxiosError(err)) {
+      return (err as AxiosError).response?.status ?? 0;
     }
-    try {
-      const { data } = await axios.get(`${this.horizonUrl}/accounts/${accountAddress}/payments`, {
-        params,
-      });
-      return data._embedded?.records ?? [];
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error('Failed to fetch payments', message);
-      return [];
-    }
+    return 0;
   }
 
   async getAssetInfo(assetCode: string, assetIssuer?: string) {
