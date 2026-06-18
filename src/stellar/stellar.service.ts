@@ -39,13 +39,13 @@ export class StellarService {
       params.cursor = cursor;
     }
     try {
-      const { data } = await axios.get(
-        `${this.horizonUrl}/accounts/${accountAddress}/payments`,
-        { params },
-      );
+      const { data } = await axios.get(`${this.horizonUrl}/accounts/${accountAddress}/payments`, {
+        params,
+      });
       return data._embedded?.records ?? [];
-    } catch (err) {
-      this.logger.error('Failed to fetch payments', err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error('Failed to fetch payments', message);
       return [];
     }
   }

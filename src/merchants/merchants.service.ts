@@ -34,11 +34,7 @@ export class MerchantsService {
   }
 
   async update(id: string, data: { businessName?: string; email?: string; logoUrl?: string }) {
-    const [updated] = await db
-      .update(merchants)
-      .set(data)
-      .where(eq(merchants.id, id))
-      .returning();
+    const [updated] = await db.update(merchants).set(data).where(eq(merchants.id, id)).returning();
     return updated;
   }
 
@@ -53,7 +49,7 @@ export class MerchantsService {
       keyPrefix,
       keyHash,
       environment,
-    });
+    } as any);
 
     return { key: rawKey, keyPrefix };
   }
@@ -68,7 +64,7 @@ export class MerchantsService {
   async revokeApiKey(merchantId: string, keyId: string) {
     const [key] = await db
       .update(apiKeys)
-      .set({ isActive: false })
+      .set({ isActive: false } as any)
       .where(eq(apiKeys.id, keyId))
       .returning();
     if (!key || key.merchantId !== merchantId) {
@@ -81,7 +77,7 @@ export class MerchantsService {
     const webhookSecret = crypto.randomBytes(32).toString('hex');
     const [updated] = await db
       .update(merchants)
-      .set({ webhookUrl, webhookSecret })
+      .set({ webhookUrl, webhookSecret } as any)
       .where(eq(merchants.id, merchantId))
       .returning();
     return { webhookUrl: updated.webhookUrl, webhookSecret };

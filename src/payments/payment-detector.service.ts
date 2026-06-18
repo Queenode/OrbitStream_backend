@@ -39,8 +39,9 @@ export class PaymentDetectorService implements OnModuleInit {
             this.cursor = op.paging_token;
           }
         }
-      } catch (err) {
-        this.logger.error('Payment polling error', err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error('Payment polling error', message);
       }
       await this.sleep(3000);
     }
@@ -54,10 +55,7 @@ export class PaymentDetectorService implements OnModuleInit {
 
     // Find pending session with this memo
     const session = await db.query.checkoutSessions.findFirst({
-      where: and(
-        eq(checkoutSessions.memo, memo),
-        eq(checkoutSessions.status, 'pending'),
-      ),
+      where: and(eq(checkoutSessions.memo, memo), eq(checkoutSessions.status, 'pending')),
     });
     if (!session) return;
 
@@ -65,20 +63,24 @@ export class PaymentDetectorService implements OnModuleInit {
     const opAmount = parseFloat(op.amount);
     const sessionAmount = parseFloat(session.amount);
     if (Math.abs(opAmount - sessionAmount) > 0.0000001) {
-      this.logger.warn(`Amount mismatch for memo ${memo}: expected ${sessionAmount}, got ${opAmount}`);
+      this.logger.warn(
+        `Amount mismatch for memo ${memo}: expected ${sessionAmount}, got ${opAmount}`,
+      );
       return;
     }
 
     // Verify asset matches
     if (op.asset_code !== session.assetCode && session.assetCode !== 'XLM') {
-      this.logger.warn(`Asset mismatch for memo ${memo}: expected ${session.assetCode}, got ${op.asset_code}`);
+      this.logger.warn(
+        `Asset mismatch for memo ${memo}: expected ${session.assetCode}, got ${op.asset_code}`,
+      );
       return;
     }
 
     // Mark session as paid
     await db
       .update(checkoutSessions)
-      .set({ status: 'paid' })
+      .set({ status: 'paid' } as any)
       .where(eq(checkoutSessions.id, session.id));
 
     // Record payment
@@ -91,7 +93,7 @@ export class PaymentDetectorService implements OnModuleInit {
       assetIssuer: op.asset_issuer ?? null,
       senderAddress: op.from,
       confirmedAt: new Date(),
-    });
+    } as any);
 
     this.metrics.paymentsConfirmed.inc();
     this.logger.log(`Payment confirmed for session ${session.id} — tx ${op.transaction_hash}`);
@@ -107,6 +109,6 @@ export class PaymentDetectorService implements OnModuleInit {
   }
 
   private sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

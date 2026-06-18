@@ -1,6 +1,4 @@
-import {
-  Controller, Post, Get, Body, Param, UseGuards, Request,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import { CreateSessionDto } from './checkout.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';

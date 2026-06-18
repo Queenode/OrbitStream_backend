@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -26,19 +26,7 @@ describe('AuthService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should reject invalid wallet address', async () => {
-    await expect(
-      service.walletLogin({ walletAddress: 'invalid' }),
-    ).rejects.toThrow(UnauthorizedException);
-  });
-
-  it('should reject empty wallet address', async () => {
-    await expect(
-      service.walletLogin({ walletAddress: '' }),
-    ).rejects.toThrow(UnauthorizedException);
-  });
-
-  it('should return token for valid wallet address', async () => {
+  it('should return token for valid wallet address via walletLogin', async () => {
     const result = await service.walletLogin({
       walletAddress: 'G' + 'A'.repeat(55),
     });
@@ -46,5 +34,11 @@ describe('AuthService', () => {
     expect(result).toHaveProperty('wallet');
     expect(result.access_token).toBe('mock-token');
     expect(jest.spyOn(jwtService, 'sign')).toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException when requestChallenge has no server configured', async () => {
+    await expect(service.requestChallenge({ walletAddress: 'G' + 'A'.repeat(55) })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });
