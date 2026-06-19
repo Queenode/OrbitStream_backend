@@ -19,6 +19,13 @@ export const sessionStatusEnum = pgEnum('session_status', [
   'cancelled',
 ]);
 
+export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
+  'pending',
+  'delivered',
+  'failed',
+  'dead',
+]);
+
 export const merchants = pgTable('merchants', {
   id: uuid('id').defaultRandom().primaryKey(),
   walletAddress: text('wallet_address').notNull().unique(),
@@ -82,12 +89,44 @@ export const webhookDeliveries = pgTable('webhook_deliveries', {
   merchantId: uuid('merchant_id')
     .notNull()
     .references(() => merchants.id),
+  // Nullable: not every webhook event belongs to a checkout session.
+  sessionId: uuid('session_id').references(() => checkoutSessions.id, { onDelete: 'cascade' }),
   event: text('event').notNull(),
   payload: jsonb('payload').notNull(),
+  // Stable per-delivery idempotency identifier sent as X-OrbitStream-Delivery-Id.
+  deliveryId: uuid('delivery_id').notNull().unique(),
+  // Per-session ordering sequence number (0 for session-less events).
+  sequence: integer('sequence').notNull().default(0),
+  priority: integer('priority').notNull().default(3),
+  status: webhookDeliveryStatusEnum('status').notNull().default('pending'),
   responseStatus: integer('response_status'),
+  // Full history of attempts: [{ attempt, timestamp, status, error }].
+  attemptLog: jsonb('attempt_log').notNull().default([]),
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   attempts: integer('attempts').notNull().default(0),
   nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const webhookDeadLetters = pgTable('webhook_dead_letters', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  merchantId: uuid('merchant_id')
+    .notNull()
+    .references(() => merchants.id),
+  deliveryId: uuid('delivery_id').notNull().unique(),
+  // References the session but uses ON DELETE SET NULL: a dead-letter row is a
+  // retained audit/recovery record that must outlive a cascade-deleted session.
+  sessionId: uuid('session_id').references(() => checkoutSessions.id, {
+    onDelete: 'set null',
+  }),
+  event: text('event').notNull(),
+  payload: jsonb('payload').notNull(),
+  // All delivery attempts with timestamps and error messages.
+  attempts: jsonb('attempts').notNull().default([]),
+  // Reason the delivery was dead-lettered (e.g. "4xx:404", "max_attempts").
+  reason: text('reason').notNull(),
+  // Set when a merchant manually requeues this entry.
+  retriedAt: timestamp('retried_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -97,4 +136,5 @@ export const schema = {
   checkoutSessions,
   payments,
   webhookDeliveries,
+  webhookDeadLetters,
 };
