@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { RequestChallengeDto, VerifyChallengeDto } from './auth.dto';
-import { RedisService } from '../redis/redis.service';
+import { RedisService } from './redis.service';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import * as crypto from 'crypto';
 import axios from 'axios';
