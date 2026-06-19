@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ServiceUnavailableException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
-import { RedisService } from './redis.service';
+import { RedisService } from '../redis/redis.service';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import axios from 'axios';
 
